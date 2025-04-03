@@ -40,7 +40,7 @@ with st.sidebar:
                         min_value=min_val,
                         max_value=max_val,
                         value=(min_val, max_val)
-                    
+                    )
                     if 'ActivityStartDate' in contam_data.columns:
                         min_date = contam_data['ActivityStartDate'].min().date()
                         max_date = contam_data['ActivityStartDate'].max().date()
