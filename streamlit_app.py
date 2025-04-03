@@ -32,14 +32,16 @@ with st.sidebar:
                 # Filters
                 contam_data = df[df['CharacteristicName'] == selected_contaminant]
                 
-                if not contam_data.empty:
-                    min_val, max_val = contam_data['ResultMeasureValue'].min(), contam_data['ResultMeasureValue'].max()
+                if not contam_data.empty and 'ResultMeasureValue' in contam_data.columns:
+                    min_val = float(contam_data['ResultMeasureValue'].min())
+                    max_val = float(contam_data['ResultMeasureValue'].max())
                     
                     value_range = st.slider(
                         "Value Range",
-                        min_value=float(min_val),
-                        max_value=float(max_val),
-                        value=(float(min_val), float(max_val))
+                        min_value=min_val,
+                        max_value=max_val,
+                        value=(min_val, max_val)
+                    )
                     
                     if 'ActivityStartDate' in contam_data.columns:
                         min_date = contam_data['ActivityStartDate'].min().date()
@@ -48,7 +50,8 @@ with st.sidebar:
                             "Date Range",
                             value=(min_date, max_date),
                             min_value=min_date,
-                            max_value=max_date)
+                            max_value=max_date
+                        )
             
         except Exception as e:
             st.error(f"Error loading data: {str(e)}")
