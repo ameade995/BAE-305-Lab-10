@@ -37,8 +37,8 @@ if results_df is not None and stations_df is not None:
     results_df['ActivityStartDate'] = pd.to_datetime(results_df['ActivityStartDate'])
     results_df['ResultMeasureValue'] = pd.to_numeric(results_df['ResultMeasureValue'], errors='coerce')
     
-    # Get unique characteristics
-    characteristics = results_df['CharacteristicName'].unique()
+    # Get unique characteristics in alphabetical order (FIX #1)
+    characteristics = sorted(results_df['CharacteristicName'].unique())
     
     # Sidebar controls
     with st.sidebar:
@@ -79,7 +79,7 @@ if results_df is not None and stations_df is not None:
             (results_df['ResultMeasureValue'] <= value_range[1]) &
             (results_df['ActivityStartDate'].dt.date >= date_range[0]) &
             (results_df['ActivityStartDate'].dt.date <= date_range[1])
-        ]
+        ].sort_values('ActivityStartDate')  # Sort by date (FIX #2)
         
         # Merge with station data
         merged_data = pd.merge(
@@ -93,11 +93,11 @@ if results_df is not None and stations_df is not None:
         tab1, tab2 = st.tabs(["📈 Time Series", "🗺️ Station Map"])
 
         with tab1:
-            # Interactive time series plot
+            # Interactive time series plot with proper sorted dates (FIX #2)
             st.subheader("Contaminant Trends Over Time")
             if not filtered_results.empty:
                 fig = px.line(
-                    filtered_results,
+                    filtered_results.sort_values('ActivityStartDate'),  # Ensure chronological order
                     x='ActivityStartDate',
                     y='ResultMeasureValue',
                     color='MonitoringLocationIdentifier',
@@ -119,26 +119,40 @@ if results_df is not None and stations_df is not None:
                 st.warning("No data available for the selected filters")
 
         with tab2:
-            # Map visualization - THIS IS THE FIXED VERSION
-            st.subheader("Station Locations with Measurements")
+            # Enhanced map visualization (FIX #3)
+            st.subheader("Station Measurement Concentrations")
             if not merged_data.empty:
-                # Create a new column combining station name and measurement
-                merged_data['Station_Label'] = (
-                    merged_data['MonitoringLocationName'] + ": " + 
-                    merged_data['ResultMeasureValue'].round(2).astype(str) + " " +
-                    merged_data['ResultMeasure/MeasureUnitCode'].fillna('')
+                # Create proper scatter map with color-coded concentrations
+                fig = px.scatter_mapbox(
+                    merged_data,
+                    lat='LatitudeMeasure',
+                    lon='LongitudeMeasure',
+                    color='ResultMeasureValue',
+                    size='ResultMeasureValue',
+                    hover_name='MonitoringLocationName',
+                    hover_data={
+                        'CharacteristicName': True,
+                        'ResultMeasureValue': ":.2f",
+                        'ActivityStartDate': "|%b %d, %Y",
+                        'LatitudeMeasure': False,
+                        'LongitudeMeasure': False
+                    },
+                    color_continuous_scale=px.colors.sequential.Viridis,
+                    zoom=7,
+                    height=600
                 )
                 
-                # Display the map with markers
-                st.map(
-                    merged_data.rename(columns={
-                        'LatitudeMeasure': 'lat',
-                        'LongitudeMeasure': 'lon'
-                    }),
-                    zoom=7,
-                    size=20,  # Marker size
-                    color='#FF0000'  # Red color for markers
+                # Set map style and layout
+                fig.update_layout(
+                    mapbox_style="open-street-map",
+                    margin={"r":0,"t":0,"l":0,"b":0},
+                    coloraxis_colorbar={
+                        'title': 'Concentration',
+                        'thickness': 20
+                    }
                 )
+                
+                st.plotly_chart(fig, use_container_width=True)
                 
                 # Show data table
                 st.subheader("Measurement Data")
