@@ -13,33 +13,28 @@ st.title("🌊 Advanced Water Quality Dashboard")
 with st.sidebar:
     st.header("Data Upload")
     uploaded_files = st.file_uploader(
-        "Upload both Results and Stations files",
+        "Upload both Results and Stations files (CSV)",
         type=["csv"],
-        accept_multiple_files=True
+        accept_multiple_files=True,
+        key="file_uploader"
     )
 
-# Initialize session state
-if 'results_df' not in st.session_state:
-    st.session_state.results_df = None
-if 'stations_df' not in st.session_state:
-    st.session_state.stations_df = None
-
 # Process uploaded files
+results_df, stations_df = None, None
 if uploaded_files and len(uploaded_files) == 2:
     for file in uploaded_files:
-        df = pd.read_csv(file)
-        if 'CharacteristicName' in df.columns:
-            st.session_state.results_df = df
-        elif 'MonitoringLocationIdentifier' in df.columns:
-            st.session_state.stations_df = df
+        try:
+            df = pd.read_csv(file)
+            if 'CharacteristicName' in df.columns:
+                results_df = df
+            elif 'MonitoringLocationIdentifier' in df.columns:
+                stations_df = df
+        except Exception as e:
+            st.error(f"Error reading {file.name}: {str(e)}")
 
 # Main analysis section
-if st.session_state.results_df is not None and st.session_state.stations_df is not None:
+if results_df is not None and stations_df is not None:
     # Data processing
-    results_df = st.session_state.results_df
-    stations_df = st.session_state.stations_df
-    
-    # Convert dates and numeric values
     results_df['ActivityStartDate'] = pd.to_datetime(results_df['ActivityStartDate'])
     results_df['ResultMeasureValue'] = pd.to_numeric(results_df['ResultMeasureValue'], errors='coerce')
     
@@ -52,32 +47,36 @@ if st.session_state.results_df is not None and st.session_state.stations_df is n
         selected_characteristics = st.multiselect(
             "Select Characteristics",
             characteristics,
-            default=characteristics[:2] if len(characteristics) > 1 else characteristics[:1]
+            default=characteristics[:1],
+            key="char_select"
         )
         
         # Date range selector
-        min_date = results_df['ActivityStartDate'].min().date()
-        max_date = results_df['ActivityStartDate'].max().date()
+        min_date = results_df['ActivityStartDate'].min().to_pydatetime().date()
+        max_date = results_df['ActivityStartDate'].max().to_pydatetime().date()
         date_range = st.date_input(
             "Select Date Range",
             value=(min_date, max_date),
             min_value=min_date,
-            max_value=max_date
+            max_value=max_date,
+            key="date_range"
         )
         
-        # Value range slider (dynamic based on selected characteristics)
+        # Value range slider
         if selected_characteristics:
-            min_val = results_df[results_df['CharacteristicName'].isin(selected_characteristics)]['ResultMeasureValue'].min()
-            max_val = results_df[results_df['CharacteristicName'].isin(selected_characteristics)]['ResultMeasureValue'].max()
+            char_data = results_df[results_df['CharacteristicName'].isin(selected_characteristics)]
+            min_val = float(char_data['ResultMeasureValue'].min())
+            max_val = float(char_data['ResultMeasureValue'].max())
             value_range = st.slider(
                 "Select Value Range",
-                min_value=float(min_val),
-                max_value=float(max_val),
-                value=(float(min_val), float(max_val))
+                min_value=min_val,
+                max_value=max_val,
+                value=(min_val, max_val),
+                key="value_range"
             )
 
     # Filter data based on selections
-    if len(date_range) == 2 and selected_characteristics:
+    if selected_characteristics and len(date_range) == 2:
         filtered_results = results_df[
             (results_df['CharacteristicName'].isin(selected_characteristics)) &
             (results_df['ResultMeasureValue'] >= value_range[0]) &
@@ -92,10 +91,10 @@ if st.session_state.results_df is not None and st.session_state.stations_df is n
             stations_df,
             on='MonitoringLocationIdentifier',
             how='left'
-        )
+        ).dropna(subset=['LatitudeMeasure', 'LongitudeMeasure'])
         
-        # Create tabs for different views
-        tab1, tab2 = st.tabs(["Time Series Analysis", "Spatial Analysis"])
+        # Create tabs
+        tab1, tab2 = st.tabs(["📈 Time Series", "🗺️ Spatial Analysis"])
         
         with tab1:
             # Interactive time series plot
@@ -110,43 +109,77 @@ if st.session_state.results_df is not None and st.session_state.stations_df is n
                     facet_col='CharacteristicName',
                     labels={
                         'ActivityStartDate': 'Date',
-                        'ResultMeasureValue': 'Concentration',
+                        'ResultMeasureValue': 'Concentration (μg/L)',
                         'MonitoringLocationIdentifier': 'Station ID'
                     },
-                    height=600
+                    height=500
                 )
-                fig.update_layout(legend_title_text='Station ID')
+                fig.update_layout(
+                    legend_title_text='Station ID',
+                    hovermode="x unified"
+                )
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.warning("No data available for the selected filters")
         
         with tab2:
-            # Map visualization
-            st.subheader("Station Locations with Selected Measurements")
-            if not merged_data.empty and 'LatitudeMeasure' in merged_data.columns and 'LongitudeMeasure' in merged_data.columns:
-                # Create a density map
-                fig = px.density_mapbox(
+            # Fixed Map Visualization
+            st.subheader("Measurement Locations")
+            if not merged_data.empty:
+                # Create proper scatter map with Mapbox
+                fig = px.scatter_mapbox(
                     merged_data,
                     lat='LatitudeMeasure',
                     lon='LongitudeMeasure',
-                    z='ResultMeasureValue',
+                    color='ResultMeasureValue',
+                    size='ResultMeasureValue',
                     hover_name='MonitoringLocationName',
-                    hover_data=['CharacteristicName', 'ResultMeasureValue'],
-                    animation_frame=pd.to_datetime(merged_data['ActivityStartDate']).dt.strftime('%Y-%m'),
-                    mapbox_style="stamen-terrain",
-                    zoom=6,
-                    height=600,
-                    title=f"Measurement Distribution: {', '.join(selected_characteristics)}"
+                    hover_data={
+                        'CharacteristicName': True,
+                        'ResultMeasureValue': ":.2f",
+                        'ActivityStartDate': "|%b %d, %Y",
+                        'LatitudeMeasure': False,
+                        'LongitudeMeasure': False
+                    },
+                    color_continuous_scale=px.colors.sequential.Viridis,
+                    zoom=7,
+                    height=600
                 )
+                
+                # Set map style and layout
+                fig.update_layout(
+                    mapbox_style="stamen-terrain",  # or "open-street-map", "carto-positron"
+                    margin={"r":0,"t":0,"l":0,"b":0},
+                    coloraxis_colorbar={
+                        'title': 'Concentration',
+                        'thickness': 20,
+                        'len': 0.5
+                    }
+                )
+                
+                # Add title
+                fig.update_layout(
+                    title={
+                        'text': f"{', '.join(selected_characteristics)} Measurements",
+                        'y':0.95,
+                        'x':0.5,
+                        'xanchor': 'center',
+                        'yanchor': 'top'
+                    }
+                )
+                
                 st.plotly_chart(fig, use_container_width=True)
                 
-                # Show station statistics
-                st.subheader("Station Measurements Summary")
+                # Show data table
+                st.subheader("Measurement Summary")
                 st.dataframe(
-                    merged_data.groupby(['MonitoringLocationIdentifier', 'CharacteristicName'])['ResultMeasureValue']
-                    .describe()
-                    .unstack()
-                    .round(2)
+                    merged_data[[
+                        'MonitoringLocationName',
+                        'CharacteristicName',
+                        'ResultMeasureValue',
+                        'ActivityStartDate'
+                    ]].sort_values('ActivityStartDate', ascending=False),
+                    height=300
                 )
             else:
                 st.warning("No location data available for mapping")
@@ -155,10 +188,9 @@ if st.session_state.results_df is not None and st.session_state.stations_df is n
 else:
     st.info("Please upload both Results and Stations CSV files to begin analysis")
 
-# Requirements needed (save as requirements.txt)
-'''
-streamlit==1.32.2
-pandas==2.1.4
-plotly==5.18.0
-numpy==1.26.3
-'''
+# Add Mapbox token instructions in sidebar
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("**Map Tips:**")
+    st.markdown("1. For better maps, sign up for a free [Mapbox token](https://account.mapbox.com/)")
+    st.markdown("2. Add to code: `px.set_mapbox_access_token('your_token')`")
