@@ -7,13 +7,13 @@ from datetime import datetime
 st.set_page_config(page_title="Water Quality Analyzer", layout="wide")
 
 # App title
-st.title("🌊 Advanced Water Quality Dashboard")
+st.title("🌊 Water Quality Dashboard")
 
 # File upload section
 with st.sidebar:
-    st.header("Data Upload")
+    st.header("Upload Data")
     uploaded_files = st.file_uploader(
-        "Upload both Results and Stations files (CSV)",
+        "Upload both Results and Stations CSV files",
         type=["csv"],
         accept_multiple_files=True
     )
@@ -46,7 +46,7 @@ if results_df is not None and stations_df is not None:
         selected_characteristics = st.multiselect(
             "Select Characteristics",
             characteristics,
-            default=characteristics[:1]
+            default=characteristics[:1] if len(characteristics) > 0 else []
         )
         
         # Date range selector
@@ -90,8 +90,8 @@ if results_df is not None and stations_df is not None:
         ).dropna(subset=['LatitudeMeasure', 'LongitudeMeasure'])
         
         # Create tabs
-        tab1, tab2 = st.tabs(["📈 Time Series", "🗺️ Spatial Analysis"])
-        
+        tab1, tab2 = st.tabs(["📈 Time Series", "🗺️ Station Map"])
+
         with tab1:
             # Interactive time series plot
             st.subheader("Contaminant Trends Over Time")
@@ -105,7 +105,7 @@ if results_df is not None and stations_df is not None:
                     facet_col='CharacteristicName',
                     labels={
                         'ActivityStartDate': 'Date',
-                        'ResultMeasureValue': 'Concentration (μg/L)',
+                        'ResultMeasureValue': 'Concentration',
                         'MonitoringLocationIdentifier': 'Station ID'
                     },
                     height=500
@@ -117,34 +117,42 @@ if results_df is not None and stations_df is not None:
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.warning("No data available for the selected filters")
-        
+
         with tab2:
-            # Fixed Map Visualization using st.map()
-            st.subheader("Measurement Locations")
+            # Map visualization - THIS IS THE FIXED VERSION
+            st.subheader("Station Locations with Measurements")
             if not merged_data.empty:
-                # Prepare data for Streamlit map
-                map_data = merged_data[['LatitudeMeasure', 'LongitudeMeasure', 'MonitoringLocationName', 'ResultMeasureValue']]
-                map_data = map_data.rename(columns={
-                    'LatitudeMeasure': 'lat',
-                    'LongitudeMeasure': 'lon'
-                })
+                # Create a new column combining station name and measurement
+                merged_data['Station_Label'] = (
+                    merged_data['MonitoringLocationName'] + ": " + 
+                    merged_data['ResultMeasureValue'].round(2).astype(str) + " " +
+                    merged_data['ResultMeasure/MeasureUnitCode'].fillna('')
+                )
                 
-                # Display the map with points
-                st.map(map_data, zoom=7)
+                # Display the map with markers
+                st.map(
+                    merged_data.rename(columns={
+                        'LatitudeMeasure': 'lat',
+                        'LongitudeMeasure': 'lon'
+                    }),
+                    zoom=7,
+                    size=20,  # Marker size
+                    color='#FF0000'  # Red color for markers
+                )
                 
                 # Show data table
-                st.subheader("Measurement Summary")
+                st.subheader("Measurement Data")
                 st.dataframe(
                     merged_data[[
                         'MonitoringLocationName',
-                        'CharacteristicName',
+                        'CharacteristicName', 
                         'ResultMeasureValue',
                         'ActivityStartDate'
                     ]].sort_values('ActivityStartDate', ascending=False),
                     height=300
                 )
             else:
-                st.warning("No location data available for mapping")
+                st.warning("No station location data available for mapping")
     else:
         st.warning("Please select both date range and at least one characteristic")
 else:
