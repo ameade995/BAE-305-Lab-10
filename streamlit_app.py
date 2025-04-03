@@ -15,8 +15,7 @@ with st.sidebar:
     uploaded_files = st.file_uploader(
         "Upload both Results and Stations files (CSV)",
         type=["csv"],
-        accept_multiple_files=True,
-        key="file_uploader"
+        accept_multiple_files=True
     )
 
 # Process uploaded files
@@ -47,8 +46,7 @@ if results_df is not None and stations_df is not None:
         selected_characteristics = st.multiselect(
             "Select Characteristics",
             characteristics,
-            default=characteristics[:1],
-            key="char_select"
+            default=characteristics[:1]
         )
         
         # Date range selector
@@ -58,8 +56,7 @@ if results_df is not None and stations_df is not None:
             "Select Date Range",
             value=(min_date, max_date),
             min_value=min_date,
-            max_value=max_date,
-            key="date_range"
+            max_value=max_date
         )
         
         # Value range slider
@@ -71,8 +68,7 @@ if results_df is not None and stations_df is not None:
                 "Select Value Range",
                 min_value=min_val,
                 max_value=max_val,
-                value=(min_val, max_val),
-                key="value_range"
+                value=(min_val, max_val)
             )
 
     # Filter data based on selections
@@ -123,52 +119,18 @@ if results_df is not None and stations_df is not None:
                 st.warning("No data available for the selected filters")
         
         with tab2:
-            # Fixed Map Visualization
+            # Fixed Map Visualization using st.map()
             st.subheader("Measurement Locations")
             if not merged_data.empty:
-                # Create proper scatter map with Mapbox
-                fig = px.scatter_mapbox(
-                    merged_data,
-                    lat='LatitudeMeasure',
-                    lon='LongitudeMeasure',
-                    color='ResultMeasureValue',
-                    size='ResultMeasureValue',
-                    hover_name='MonitoringLocationName',
-                    hover_data={
-                        'CharacteristicName': True,
-                        'ResultMeasureValue': ":.2f",
-                        'ActivityStartDate': "|%b %d, %Y",
-                        'LatitudeMeasure': False,
-                        'LongitudeMeasure': False
-                    },
-                    color_continuous_scale=px.colors.sequential.Viridis,
-                    zoom=7,
-                    height=600
-                )
+                # Prepare data for Streamlit map
+                map_data = merged_data[['LatitudeMeasure', 'LongitudeMeasure', 'MonitoringLocationName', 'ResultMeasureValue']]
+                map_data = map_data.rename(columns={
+                    'LatitudeMeasure': 'lat',
+                    'LongitudeMeasure': 'lon'
+                })
                 
-                # Set map style and layout
-                fig.update_layout(
-                    mapbox_style="stamen-terrain",  # or "open-street-map", "carto-positron"
-                    margin={"r":0,"t":0,"l":0,"b":0},
-                    coloraxis_colorbar={
-                        'title': 'Concentration',
-                        'thickness': 20,
-                        'len': 0.5
-                    }
-                )
-                
-                # Add title
-                fig.update_layout(
-                    title={
-                        'text': f"{', '.join(selected_characteristics)} Measurements",
-                        'y':0.95,
-                        'x':0.5,
-                        'xanchor': 'center',
-                        'yanchor': 'top'
-                    }
-                )
-                
-                st.plotly_chart(fig, use_container_width=True)
+                # Display the map with points
+                st.map(map_data, zoom=7)
                 
                 # Show data table
                 st.subheader("Measurement Summary")
@@ -187,10 +149,3 @@ if results_df is not None and stations_df is not None:
         st.warning("Please select both date range and at least one characteristic")
 else:
     st.info("Please upload both Results and Stations CSV files to begin analysis")
-
-# Add Mapbox token instructions in sidebar
-with st.sidebar:
-    st.markdown("---")
-    st.markdown("**Map Tips:**")
-    st.markdown("1. For better maps, sign up for a free [Mapbox token](https://account.mapbox.com/)")
-    st.markdown("2. Add to code: `px.set_mapbox_access_token('your_token')`")
