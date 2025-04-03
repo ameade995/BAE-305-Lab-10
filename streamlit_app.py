@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from datetime import datetime
 
 # Set page config
@@ -41,7 +40,6 @@ with st.sidebar:
                         min_value=min_val,
                         max_value=max_val,
                         value=(min_val, max_val)
-                    )
                     
                     if 'ActivityStartDate' in contam_data.columns:
                         min_date = contam_data['ActivityStartDate'].min().date()
@@ -50,8 +48,7 @@ with st.sidebar:
                             "Date Range",
                             value=(min_date, max_date),
                             min_value=min_date,
-                            max_value=max_date
-                        )
+                            max_value=max_date)
             
         except Exception as e:
             st.error(f"Error loading data: {str(e)}")
@@ -80,20 +77,12 @@ if uploaded_file is not None and 'CharacteristicName' in df.columns:
         col1, col2 = st.columns(2)
         
         with col1:
-            # Time series plot
+            # Time series plot using Streamlit's native line_chart
             if not filtered.empty and 'ActivityStartDate' in filtered.columns:
                 st.subheader("Trend Over Time")
-                fig = px.line(
-                    filtered,
-                    x='ActivityStartDate',
-                    y='ResultMeasureValue',
-                    color='MonitoringLocationIdentifier',
-                    labels={
-                        'ActivityStartDate': 'Date',
-                        'ResultMeasureValue': f'{selected_contaminant} Concentration'
-                    }
-                )
-                st.plotly_chart(fig, use_container_width=True)
+                # Prepare data for line chart
+                chart_data = filtered.set_index('ActivityStartDate')[['ResultMeasureValue']]
+                st.line_chart(chart_data)
             else:
                 st.warning("No date data available for time series")
         
